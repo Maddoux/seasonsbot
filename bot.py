@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import re
+import asyncio
 from dotenv import load_dotenv
 from typing import Optional, List
 from database import DatabaseManager
@@ -593,37 +594,103 @@ class SeasonsBot(commands.Bot):
     async def setup_hook(self):
         """Setup hook that runs after login but before on_ready"""
         try:
-            # Sync commands globally, just in case
-            synced = await self.tree.sync()
-            print(f"Synced {len(synced)} global commands")
+            # Wait a moment to ensure bot is fully initialized
+            await asyncio.sleep(1)
             
-            # Also sync to Seasons guild (instant)
+            # Clear any existing global commands to avoid conflicts
+            self.tree.clear_commands(guild=None)
+            
+            # Check if we're in the target guild
             guild_id = 1365988649665036288  # Seasons RP
-            try:
-                guild = discord.Object(id=guild_id)
-                self.tree.copy_global_to(guild=guild)
-                synced_guild = await self.tree.sync(guild=guild)
-                print(f"Synced {len(synced_guild)} commands to guild {guild_id}")
-            except Exception as e:
-                print(f"Failed to sync to guild {guild_id}: {e}")
+            target_guild = self.get_guild(guild_id)
+            
+            if target_guild:
+                # We're in the guild, sync directly to guild only
+                synced = await self.tree.sync(guild=target_guild)
+                print(f"✅ Successfully synced {len(synced)} commands to guild {guild_id}")
+                print(f"Commands: {[cmd.name for cmd in synced]}")
+            else:
+                # Bot is not in the guild - give clear instructions
+                print(f"❌ ERROR: Bot is not in guild {guild_id} (Seasons RP)")
+                print("🔧 SOLUTION: Invite the bot to the Discord server using this URL:")
+                print(f"   https://discord.com/api/oauth2/authorize?client_id=YOUR_BOT_CLIENT_ID&permissions=277025507328&scope=bot%20applications.commands")
+                print("   Replace YOUR_BOT_CLIENT_ID with your actual bot's client ID")
+                print("⚠️  Commands will NOT work until the bot is properly invited to the guild!")
+                return
             
         except Exception as e:
-            print(f"Failed to sync commands: {e}")
+            print(f"❌ Failed to sync commands: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Only try guild sync as fallback
+            try:
+                print("Attempting fallback guild sync...")
+                guild = discord.Object(id=1365988649665036288)
+                synced_guild = await self.tree.sync(guild=guild)
+                print(f"Fallback guild sync: {len(synced_guild)} commands")
+            except Exception as fallback_error:
+                print(f"❌ Guild sync failed: {fallback_error}")
+                print("🔧 Make sure the bot is invited to the guild with proper permissions!")
+                import traceback
+                traceback.print_exc()
     
     async def on_ready(self):
         print(f'{self.user} has logged in!')
         print(f'Bot is in {len(self.guilds)} guilds')
         
         # List all guilds the bot is in - should only be Seasons RP
+        seasons_guild_found = False
         print("Guilds:")
         for guild in self.guilds:
             print(f"  - {guild.name} (ID: {guild.id})")
+            if guild.id == 1365988649665036288:
+                seasons_guild_found = True
+                print(f"    ✅ Seasons RP guild found!")
+        
+        if not seasons_guild_found:
+            print("⚠️  WARNING: Bot is not in Seasons RP guild!")
         
         # Show command tree info
-        commands = [cmd.name for cmd in self.tree.get_commands()]
-        print(f"Available commands: {', '.join(commands)}")
+        global_commands = [cmd.name for cmd in self.tree.get_commands(guild=None)]
+        print(f"Global commands: {', '.join(global_commands) if global_commands else 'None'}")
+        
+        # Check guild-specific commands
+        if seasons_guild_found:
+            guild = discord.utils.get(self.guilds, id=1365988649665036288)
+            if guild:
+                guild_commands = [cmd.name for cmd in self.tree.get_commands(guild=guild)]
+                print(f"Guild commands: {', '.join(guild_commands) if guild_commands else 'None'}")
+        
+        all_commands = [cmd.name for cmd in self.tree.get_commands()]
+        print(f"All available commands: {', '.join(all_commands)}")
         
         print("Bot is ready and commands should be available!")
+    
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Handle application command errors"""
+        print(f"App command error in {interaction.command.name if interaction.command else 'unknown'}: {error}")
+        
+        if isinstance(error, app_commands.CommandNotFound):
+            print(f"Command not found: {interaction.command}")
+        elif isinstance(error, app_commands.MissingPermissions):
+            print(f"Missing permissions for {interaction.user}")
+        else:
+            print(f"Unexpected error type: {type(error)}")
+        
+        # Try to respond if we haven't already
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"An error occurred: {str(error)}", 
+                    ephemeral=True
+                )
+        except:
+            pass
+    
+    async def on_error(self, event_method: str, *args, **kwargs):
+        """Handle general bot errors"""
+        print(f"Bot error in {event_method}: {args}")
 
 bot = SeasonsBot()
 
@@ -1190,22 +1257,29 @@ async def sync_command(interaction: discord.Interaction):
         return
     
     try:
-        # Sync globally
-        synced_global = await bot.tree.sync()
+        # Clear global commands to avoid conflicts
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()  # Clear global
         
-        # Sync to current guild
-        synced_guild = await bot.tree.sync(guild=interaction.guild)
+        # Sync only to Seasons guild
+        guild_id = 1365988649665036288  # Seasons RP
+        guild = discord.Object(id=guild_id)
+        synced = await bot.tree.sync(guild=guild)
         
         embed = discord.Embed(
             title="Command Sync Complete",
             color=discord.Color.green(),
             timestamp=discord.utils.utcnow()
         )
-        embed.add_field(name="Global Commands", value=f"{len(synced_global)} commands synced", inline=True)
-        embed.add_field(name="Guild Commands", value=f"{len(synced_guild)} commands synced", inline=True)
-        embed.add_field(name="Note", value="Global commands may take up to 1 hour to appear.\nGuild commands appear instantly.", inline=False)
+        embed.add_field(name="Method", value="Guild-only sync (instant)", inline=True)
+        embed.add_field(name="Commands Synced", value=f"{len(synced)} commands", inline=True)
+        embed.add_field(name="Guild ID", value=str(guild_id), inline=True)
+        embed.add_field(name="Note", value="Commands should appear immediately in this guild.", inline=False)
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
         
     except Exception as e:
         await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
