@@ -25,8 +25,20 @@ class DatabaseManager:
         try:
             async with aiofiles.open(self.db_path, 'r') as f:
                 content = await f.read()
-                return json.loads(content)
-        except Exception:
+                data = json.loads(content)
+                
+                # Ensure all required keys exist
+                if "users" not in data:
+                    data["users"] = {}
+                if "warnings" not in data:
+                    data["warnings"] = {}
+                if "bans" not in data:
+                    data["bans"] = {}
+                
+                return data
+        except Exception as e:
+            print(f"Error loading database: {e}")
+            # Return default structure if file doesn't exist or is corrupted
             return {"users": {}, "warnings": {}, "bans": {}}
     
     async def save_data(self, data: dict):
@@ -97,6 +109,11 @@ class DatabaseManager:
         data = await self.load_data()
         user_id_str = str(user_id)
         
+        # Ensure users key exists and user exists in users
+        if "users" not in data:
+            data["users"] = {}
+            await self.save_data(data)
+        
         if user_id_str not in data["users"]:
             return 0
         
@@ -116,9 +133,14 @@ class DatabaseManager:
         return total_points
     
     async def get_user_warnings(self, user_id: int) -> List[dict]:
-        """Get all active warnings for a user"""
+        """Get all active (non-expired) warnings for a user"""
         data = await self.load_data()
         user_id_str = str(user_id)
+        
+        # Ensure users key exists and user exists in users
+        if "users" not in data:
+            data["users"] = {}
+            await self.save_data(data)
         
         if user_id_str not in data["users"]:
             return []
@@ -224,6 +246,11 @@ class DatabaseManager:
         data = await self.load_data()
         user_id_str = str(user_id)
         
+        # Ensure users key exists and user exists in users
+        if "users" not in data:
+            data["users"] = {}
+            await self.save_data(data)
+        
         if user_id_str not in data["users"]:
             return 0
         
@@ -251,6 +278,11 @@ class DatabaseManager:
         """Find recent warnings for a user (including removed ones for staff review)"""
         data = await self.load_data()
         user_id_str = str(user_id)
+        
+        # Ensure users key exists and user exists in users
+        if "users" not in data:
+            data["users"] = {}
+            await self.save_data(data)
         
         if user_id_str not in data["users"]:
             return []
