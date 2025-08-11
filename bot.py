@@ -591,12 +591,39 @@ class SeasonsBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents)
     
     async def setup_hook(self):
-        await self.tree.sync()
-        print(f"Synced commands for {self.user}")
+        """Setup hook that runs after login but before on_ready"""
+        try:
+            # Sync commands globally, just in case
+            synced = await self.tree.sync()
+            print(f"Synced {len(synced)} global commands")
+            
+            # Also sync to Seasons guild (instant)
+            guild_id = 1365988649665036288  # Seasons RP
+            try:
+                guild = discord.Object(id=guild_id)
+                self.tree.copy_global_to(guild=guild)
+                synced_guild = await self.tree.sync(guild=guild)
+                print(f"Synced {len(synced_guild)} commands to guild {guild_id}")
+            except Exception as e:
+                print(f"Failed to sync to guild {guild_id}: {e}")
+            
+        except Exception as e:
+            print(f"Failed to sync commands: {e}")
     
     async def on_ready(self):
         print(f'{self.user} has logged in!')
         print(f'Bot is in {len(self.guilds)} guilds')
+        
+        # List all guilds the bot is in - should only be Seasons RP
+        print("Guilds:")
+        for guild in self.guilds:
+            print(f"  - {guild.name} (ID: {guild.id})")
+        
+        # Show command tree info
+        commands = [cmd.name for cmd in self.tree.get_commands()]
+        print(f"Available commands: {', '.join(commands)}")
+        
+        print("Bot is ready and commands should be available!")
 
 bot = SeasonsBot()
 
@@ -1152,6 +1179,36 @@ async def log_license_action(interaction: discord.Interaction, user: discord.Use
         await warning_log_channel.send(embed=embed)
     except Exception as e:
         print(f"Error logging license action: {e}")
+
+@bot.tree.command(name="sync", description="Manually sync bot commands (Owner only)")
+async def sync_command(interaction: discord.Interaction):
+    """Manual command sync for debugging purposes"""
+    # Check if user is bot owner
+    app_info = await bot.application_info()
+    if interaction.user.id != app_info.owner.id:
+        await interaction.response.send_message("Only the bot owner can use this command.", ephemeral=True)
+        return
+    
+    try:
+        # Sync globally
+        synced_global = await bot.tree.sync()
+        
+        # Sync to current guild
+        synced_guild = await bot.tree.sync(guild=interaction.guild)
+        
+        embed = discord.Embed(
+            title="Command Sync Complete",
+            color=discord.Color.green(),
+            timestamp=discord.utils.utcnow()
+        )
+        embed.add_field(name="Global Commands", value=f"{len(synced_global)} commands synced", inline=True)
+        embed.add_field(name="Guild Commands", value=f"{len(synced_guild)} commands synced", inline=True)
+        embed.add_field(name="Note", value="Global commands may take up to 1 hour to appear.\nGuild commands appear instantly.", inline=False)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+    except Exception as e:
+        await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
 
 if __name__ == "__main__":
     token = os.getenv('BOT_TOKEN')
