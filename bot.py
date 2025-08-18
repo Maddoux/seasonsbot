@@ -593,9 +593,27 @@ class SeasonsBot(commands.Bot):
     
     async def setup_hook(self):
         """Setup hook that runs after login but before on_ready"""
+        print("🔧 Setup hook started - commands will be synced in on_ready after all commands are loaded")
+    
+    async def on_ready(self):
+        print(f'{self.user} has logged in!')
+        print(f'Bot is in {len(self.guilds)} guilds')
+        
+        # List all guilds the bot is in - should only be Seasons RP
+        seasons_guild_found = False
+        print("Guilds:")
+        for guild in self.guilds:
+            print(f"  - {guild.name} (ID: {guild.id})")
+            if guild.id == 1365988649665036288:
+                seasons_guild_found = True
+                print(f"    ✅ Seasons RP guild found!")
+        
+        if not seasons_guild_found:
+            print("⚠️  WARNING: Bot is not in Seasons RP guild!")
+        
+        # Now sync commands after all are loaded
         try:
-            # Wait a moment to ensure bot is fully initialized
-            await asyncio.sleep(1)
+            print("🔧 Syncing commands to guild...")
             
             # Clear any existing global commands to avoid conflicts
             self.tree.clear_commands(guild=None)
@@ -613,8 +631,7 @@ class SeasonsBot(commands.Bot):
                 # Bot is not in the guild - give clear instructions
                 print(f"❌ ERROR: Bot is not in guild {guild_id} (Seasons RP)")
                 print("🔧 SOLUTION: Invite the bot to the Discord server using this URL:")
-                print(f"   https://discord.com/api/oauth2/authorize?client_id=YOUR_BOT_CLIENT_ID&permissions=277025507328&scope=bot%20applications.commands")
-                print("   Replace YOUR_BOT_CLIENT_ID with your actual bot's client ID")
+                print(f"   https://discord.com/api/oauth2/authorize?client_id=1398273706890887260&permissions=277025507328&scope=bot%20applications.commands")
                 print("⚠️  Commands will NOT work until the bot is properly invited to the guild!")
                 return
             
@@ -634,22 +651,6 @@ class SeasonsBot(commands.Bot):
                 print("🔧 Make sure the bot is invited to the guild with proper permissions!")
                 import traceback
                 traceback.print_exc()
-    
-    async def on_ready(self):
-        print(f'{self.user} has logged in!')
-        print(f'Bot is in {len(self.guilds)} guilds')
-        
-        # List all guilds the bot is in - should only be Seasons RP
-        seasons_guild_found = False
-        print("Guilds:")
-        for guild in self.guilds:
-            print(f"  - {guild.name} (ID: {guild.id})")
-            if guild.id == 1365988649665036288:
-                seasons_guild_found = True
-                print(f"    ✅ Seasons RP guild found!")
-        
-        if not seasons_guild_found:
-            print("⚠️  WARNING: Bot is not in Seasons RP guild!")
         
         # Show command tree info
         global_commands = [cmd.name for cmd in self.tree.get_commands(guild=None)]
@@ -1280,14 +1281,15 @@ async def sync_command(interaction: discord.Interaction):
         
     except Exception as e:
         await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
-        
-    except Exception as e:
-        await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
 
 if __name__ == "__main__":
-    token = os.getenv('BOT_TOKEN')
+    token = os.getenv('DISCORD_TOKEN') or os.getenv('BOT_TOKEN')
     if not token:
-        print("Error: BOT_TOKEN not found in environment variables")
+        print("Error: DISCORD_TOKEN or BOT_TOKEN not found in environment variables")
+        print("Make sure you have a .env file with either:")
+        print("  DISCORD_TOKEN=your_bot_token_here")
+        print("  or")
+        print("  BOT_TOKEN=your_bot_token_here")
         exit(1)
     
     bot.run(token)
