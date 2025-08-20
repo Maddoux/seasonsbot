@@ -593,7 +593,7 @@ class SeasonsBot(commands.Bot):
     
     async def setup_hook(self):
         """Setup hook that runs after login but before on_ready"""
-        print("🔧 Setup hook started - commands will be synced in on_ready after all commands are loaded")
+        pass
     
     async def on_ready(self):
         print(f'{self.user} has logged in!')
@@ -611,10 +611,11 @@ class SeasonsBot(commands.Bot):
         if not seasons_guild_found:
             print("⚠️  WARNING: Bot is not in Seasons RP guild!")
         
+        # Wait a moment to ensure all commands are loaded
+        await asyncio.sleep(2)
+        
         # Now sync commands after all are loaded
         try:
-            print("🔧 Syncing commands to guild...")
-            
             # Clear any existing global commands to avoid conflicts
             self.tree.clear_commands(guild=None)
             
@@ -693,6 +694,7 @@ class SeasonsBot(commands.Bot):
         """Handle general bot errors"""
         print(f"Bot error in {event_method}: {args}")
 
+# Create bot instance and register commands
 bot = SeasonsBot()
 
 @bot.tree.command(name="warn", description="Warn a user for rule violations")
@@ -1282,14 +1284,23 @@ async def sync_command(interaction: discord.Interaction):
     except Exception as e:
         await interaction.response.send_message(f"Sync failed: {e}", ephemeral=True)
 
-if __name__ == "__main__":
+def main():
+    """Main function to ensure all commands are loaded before running bot"""
+    # Ensure all commands are loaded by checking the command tree
+    import time
+    time.sleep(0.1)  # Small delay to ensure all decorators are processed
+    
+    command_count = len(bot.tree.get_commands())
+    if command_count == 0:
+        print("ERROR: No commands registered! Bot will not work properly.")
+        return
+    
     token = os.getenv('DISCORD_TOKEN') or os.getenv('BOT_TOKEN')
     if not token:
         print("Error: DISCORD_TOKEN or BOT_TOKEN not found in environment variables")
-        print("Make sure you have a .env file with either:")
-        print("  DISCORD_TOKEN=your_bot_token_here")
-        print("  or")
-        print("  BOT_TOKEN=your_bot_token_here")
         exit(1)
     
     bot.run(token)
+
+if __name__ == "__main__":
+    main()
